@@ -11,7 +11,7 @@ import json
 
 SLEEP_AFTER_SECS = 120
 current_uptime_secs = 0
-
+power_save = False
 pause_update = False
 
 
@@ -21,13 +21,17 @@ label_last = M5TextBox(38, 0, "00:00:00", lcd.FONT_DejaVu24, 0xf4ff00, rotate=90
 
 main_ui = [label_clock, label_batt, label_last]
 
-label_time0 = M5TextBox(6, 10, "17:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
-label_time1 = M5TextBox(6, 30, "18:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
-label_time2 = M5TextBox(6, 45, "19:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
-label_time3 = M5TextBox(6, 60, "21:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
-label_time4 = M5TextBox(6, 75, "22:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
+label_time0 = M5TextBox(6, 15, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
+label_time1 = M5TextBox(6, 30, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
+label_time2 = M5TextBox(6, 45, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
+label_time3 = M5TextBox(6, 60, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
+label_time4 = M5TextBox(6, 75, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
+label_time5 = M5TextBox(6, 90, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
+label_time6 = M5TextBox(6, 105, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
+label_power_mode = M5TextBox(5, 139, "", lcd.FONT_DefaultSmall, 0xFFFFFF, rotate=0)
+label_power_mode.hide()
 
-times_ui = [label_time0, label_time1, label_time2, label_time3, label_time4]
+times_ui = [label_time0, label_time1, label_time2, label_time3, label_time4, label_time5, label_time6]
 
 press_circle = M5Circle(38, 134, 15, 0xf40202, 0xffffff)
 press_circle.hide()
@@ -81,14 +85,14 @@ def time_diff_human(seconds):
   r = '{}:{}:{}'.format(zpad(hours), zpad(minutes), zpad(seconds))
   return r
 
-def load_times(max_times=5):
+def load_times(max_times=7):
   times = []
   try:
     times = json.loads(open('times.json').read())
   except OSError:
     print('No current file, return empty')
   if len(times) > max_times:
-    times = times[-5:]
+    times = times[-max_times:]
   return times
 
 def save_time():
@@ -114,6 +118,19 @@ def time_since_human():
   time_diff = time_diff_human(last_time)
   return time_diff
 
+def last_times_as_text():
+    texts = []
+    print('Get past as texts')
+    times = load_times()
+    print('Times found ', times)
+    global times_ui
+    for i in range(7):
+        try:
+            texts.append(get_human_time(times[i]))
+        except IndexError:
+            pass
+    return texts
+
 def button_pressed_reset_timer():
   hide_all_ui(banner_ui)
   press_circle.show()
@@ -121,12 +138,19 @@ def button_pressed_reset_timer():
   save_time()
   press_circle.hide()
   show_all_ui(banner_ui)
+  # Send as email if enabled
+  times = last_times_as_text()
+  times_text = '\n'.join(times)
+  times_text = times_text.replace(':', '.')
+  print('Sending times ', times_text)
+  send_email('Alfons sista napptider', times_text)
+
 
 def button_pressed_show_past():
     print('Show past')
     times = load_times()
     global times_ui
-    for i in range(5):
+    for i in range(7):
         try:
             times_ui[i].setText(get_human_time(times[i]))
         except IndexError:
@@ -136,7 +160,15 @@ def button_pressed_show_past():
     show_all_ui(times_ui)
     global pause_update
     pause_update = True
-    wait_ms(10000)
+    global power_save
+    for _ in range(100):
+        if btnA.isPressed():
+            power_save = not power_save
+            label_power_mode.setText('Bat. spar {}'.format({True: 'ja', False: 'nej'}[power_save]))
+            label_power_mode.show()
+            wait_ms(1000)
+            label_power_mode.hide()
+        wait_ms(100)
     hide_all_ui(times_ui)
     show_all_ui(main_ui)
     show_all_ui(banner_ui)
@@ -179,6 +211,39 @@ def deep_sleep():
     p37.irq(trigger = machine.Pin.WAKE_LOW, wake = machine.DEEPSLEEP)
     machine.deepsleep(172800000)
 
+def get_email_config():
+    required_keys = ('sender_email', 'sender_name', 'sender_app_password', 'recipient_email')
+    try:
+        email_config = json.loads(open('email.json').read())
+        print('Read email config', email_config)
+    except OSError:
+        print('Unable to read email.json')
+        return None
+    if not all([item for item in email_config.keys()]):
+        print('Failed get all keys ', required_keys)
+        return None
+    return email_config
+
+
+def send_email(email_subject, email_body):
+    c = get_email_config()
+    if not c:
+        print('No valid email skipping')
+        return
+    import umail
+    # email_body = '02:44:18,12:28:11,15:10:19,15:13:10,15:16:29,15:20:53,15:24:49\n\n'
+    for to_address in c['recipient_email'].split(','):
+      print('Sending email to ', to_address)
+      smtp = umail.SMTP('smtp.gmail.com', 465, ssl=True) # Gmail's SSL port
+      smtp.login(c['sender_email'], c['sender_app_password'])
+      smtp.to(to_address)
+      smtp.write("From:" + c['sender_name'] + "<"+ c['sender_email'] +">\n")
+      smtp.write("Subject:" + email_subject + "\n")
+      print('Within send_email send body: ', email_body)
+      smtp.write(email_body)
+      smtp.send()
+      smtp.quit()
+
 def update_display():
     t = get_human_time()
     print('Current time: ', t)
@@ -194,12 +259,12 @@ def update_display():
 @timerSch.event('seconds')
 def tseconds():
   global current_uptime_secs
-  current_uptime_secs += 1
-  if current_uptime_secs >= SLEEP_AFTER_SECS:
-    print('Going to sleep')
-    turn_off_display()
-    deep_sleep()
-
+  if power_save:
+    current_uptime_secs += 1
+    if current_uptime_secs >= SLEEP_AFTER_SECS:
+        print('Going to sleep')
+        turn_off_display()
+        deep_sleep()
   global pause_update
   if not pause_update:
     update_display()
