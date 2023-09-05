@@ -8,7 +8,22 @@ On 22nd of August 2023 we got a new born son named Alfons, as most parent might 
 
 I flashed the device using the [M5 Burner](https://docs.m5stack.com/en/download), that assures all those libraries being there, and I also used web based [UI Flow](https://flow.m5stack.com/) to simplify building the UI. At this stage you also configure the device to connect to your Wifi.
 
-Also using the [M5-stack Visual Code plugin](https://marketplace.visualstudio.com/items?itemName=curdeveryday.vscode-m5stack-mpy) made it easier to upload to the device, so since there is a default `temp.py`that you can ovewrite with the one in this source.
+Also using the [M5-stack Visual Code plugin](https://marketplace.visualstudio.com/items?itemName=curdeveryday.vscode-m5stack-mpy) made it easier to upload `temp.py` and `umail.py`to the device, so since there is a default `temp.py`that you can ovewrite with the one in this source.
+
+#### Have last time records sent as e-mail
+
+In such case register a gmail account with its app password and upload a file `email.json`with content such as
+
+```json
+{
+ "sender_email": "ME@gmail.com", 
+ "sender_name": "ME", 
+ "sender_app_password": "MYAPPPASSWORD", 
+ "recipient_email": "daniel@engvalls.eu"
+}
+```
+
+
 
 ## Technical notes behind the code
 
@@ -19,6 +34,10 @@ To allow this to function consider this device does not come with a [RTC](https:
 Once you start the device you click once on **Button A** at the initial logo, then it allows you to go to **Apps** and select `temp` .. so it will start next time you start the device.
 
 Within the App you can click on **Button A** for saving a record of time, and you have a yellow timer that states how long time ago the baby was fed. With the **Button B** you are able to see the last 5 records.
+
+In the view with those times you can press **Button A** to enable power saver mode, including deep sleep after 2 minutes idle.
+
+
 
 ## Screenshot and demo
 
