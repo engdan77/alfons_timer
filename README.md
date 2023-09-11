@@ -10,7 +10,7 @@ I flashed the device using the [M5 Burner](https://docs.m5stack.com/en/download)
 
 Also using the [M5-stack Visual Code plugin](https://marketplace.visualstudio.com/items?itemName=curdeveryday.vscode-m5stack-mpy) made it easier to upload `temp.py` and `umail.py`to the device, so since there is a default `temp.py`that you can ovewrite with the one in this source.
 
-### Pre-configure e-mail
+### Pre-configure wifi
 
 Upload file `wifi.json` with content such as
 
