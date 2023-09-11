@@ -8,6 +8,7 @@ import ntptime
 import time
 import wifiCfg
 import json
+import time
 
 SLEEP_AFTER_SECS = 120
 current_uptime_secs = 0
@@ -20,6 +21,8 @@ label_batt = M5TextBox(60, 0, "", lcd.FONT_DefaultSmall, 0x32fc04, rotate=90)
 label_last = M5TextBox(38, 0, "00:00:00", lcd.FONT_DejaVu24, 0xf4ff00, rotate=90)
 
 main_ui = [label_clock, label_batt, label_last]
+for _ in main_ui:
+   _.hide()
 
 label_time0 = M5TextBox(6, 15, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
 label_time1 = M5TextBox(6, 30, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
@@ -32,6 +35,8 @@ label_power_mode = M5TextBox(5, 139, "", lcd.FONT_DefaultSmall, 0xFFFFFF, rotate
 label_power_mode.hide()
 
 times_ui = [label_time0, label_time1, label_time2, label_time3, label_time4, label_time5, label_time6]
+for _ in times_ui:
+   _.hide()
 
 press_circle = M5Circle(38, 134, 15, 0xf40202, 0xffffff)
 press_circle.hide()
@@ -39,12 +44,55 @@ press_circle.hide()
 banner_bg = M5Rect(0, 130, 80, 30, 0xff04ed, 0xee0afc)
 banner_text = M5TextBox(5, 139, "Alfons Timer", lcd.FONT_DefaultSmall, 0xFFFFFF, rotate=0)
 banner_ui = [banner_bg, banner_text]
+lcd.clear()
 
 
-print('Configure wifi')
-wifiCfg.autoConnect(lcdShow=True)
-print('Get NTP')
-ntp = ntptime.client(host='cn.pool.ntp.org', timezone=8)
+def wifi_connect():
+  # New
+  print("start connect wifi")
+  try:
+     print('Found wifi configuration')
+     c = json.loads(open('wifi.json').read())
+  except OSError:
+     print('No wifi.cfg use default wifi configuration')
+     wifiCfg.autoConnect(lcdShow=True)
+     return
+  print('Connecting to ', c['ssid'])
+  for i in range(1,10):
+      if not (wifiCfg.wlan_sta.isconnected()):
+          lcd.clear()
+          lcd.setCursor(10, 10)
+          lcd.print('Attempt {}'.format(i))
+          print("try reconnect attempt ", i)
+          r = wifiCfg.connect(c['ssid'], c['password'], 5000, block=True)
+          print('Wifi result: ', r)
+          wait(5 * i)
+      else:
+         print('Connected')
+         break
+      print("get ifconfig")
+      print(wifiCfg.wlan_sta.ifconfig())
+      wait(1)
+  else:
+      print('Failed connect to wifi')
+      lcd.clear()
+      lcd.setCursor(10, 10)
+      lcd.print('Fail')
+      wait(5)
+      machine.reset()
+
+    
+  
+def get_time():
+  print('Get NTP')
+  ntp = ntptime.client(host='cn.pool.ntp.org', timezone=8)
+  return ntp
+
+wifi_connect()
+ntp = get_time()
+watchdog = machine.WDT(timeout=30000)
+lcd.clear()
+
 
 def hide_all_ui(input_list):
   for _ in input_list:
@@ -254,6 +302,8 @@ def update_display():
     time_since = time_since_human()
     print('Time since last: ', time_since)
     label_last.setText(str(time_since))
+    global watchdog
+    watchdog.feed()
 
 
 @timerSch.event('seconds')
