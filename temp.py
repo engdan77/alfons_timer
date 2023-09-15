@@ -14,6 +14,8 @@ SLEEP_AFTER_SECS = 120
 current_uptime_secs = 0
 power_save = False
 pause_update = False
+connected_wifi = False
+axp.setLcdBrightness(30)
 
 
 label_clock = M5TextBox(74, 0, "", lcd.FONT_DefaultSmall, 0x32fc04, rotate=90)
@@ -33,6 +35,9 @@ label_time5 = M5TextBox(6, 90, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
 label_time6 = M5TextBox(6, 105, "00:00", lcd.FONT_Default, 0xFFFFFF, rotate=0)
 label_power_mode = M5TextBox(5, 139, "", lcd.FONT_DefaultSmall, 0xFFFFFF, rotate=0)
 label_power_mode.hide()
+label_no_wifi = M5TextBox(55, 102, "!", lcd.FONT_DejaVu40, 0xf50000, rotate=90)
+label_no_wifi.hide()
+
 
 times_ui = [label_time0, label_time1, label_time2, label_time3, label_time4, label_time5, label_time6]
 for _ in times_ui:
@@ -47,6 +52,14 @@ banner_ui = [banner_bg, banner_text]
 lcd.clear()
 
 
+def print_lcd(text):
+    print(text)
+    lcd.clear()
+    lcd.setCursor(10, 10)
+    lcd.print(text)
+    wait(3)
+   
+
 def wifi_connect():
   # New
   print("start connect wifi")
@@ -58,40 +71,34 @@ def wifi_connect():
      wifiCfg.autoConnect(lcdShow=True)
      return
   print('Connecting to ', c['ssid'])
-  for i in range(1,10):
+  for i in range(1,4):
       if not (wifiCfg.wlan_sta.isconnected()):
-          lcd.clear()
-          lcd.setCursor(10, 10)
-          lcd.print('Attempt {}'.format(i))
-          print("try reconnect attempt ", i)
+          print_lcd('Attempt {}'.format(i))
           r = wifiCfg.connect(c['ssid'], c['password'], 5000, block=True)
           print('Wifi result: ', r)
           wait(5 * i)
       else:
-         print('Connected')
+         print_lcd('Connected')
+         global connected_wifi
+         connected_wifi = True
          break
-      print("get ifconfig")
-      print(wifiCfg.wlan_sta.ifconfig())
-      wait(1)
-  else:
-      print('Failed connect to wifi')
-      lcd.clear()
-      lcd.setCursor(10, 10)
-      lcd.print('Fail')
-      wait(5)
-      machine.reset()
-
-    
+  print("get ifconfig")
+  print(wifiCfg.wlan_sta.ifconfig())
+  wait(1)    
   
 def get_time():
+  if not connected_wifi:
+     return None
   print('Get NTP')
   ntp = ntptime.client(host='cn.pool.ntp.org', timezone=8)
   return ntp
 
+watchdog = machine.WDT(timeout=120000)
 wifi_connect()
 ntp = get_time()
-watchdog = machine.WDT(timeout=30000)
 lcd.clear()
+if not connected_wifi:
+   label_no_wifi.show()
 
 
 def hide_all_ui(input_list):
@@ -107,9 +114,32 @@ def zpad(text):
         return '0{}'.format(text)
     else:
         return str(text)
+    
+def get_stored_last_timestamp():
+  try:
+    ts = open('last_ts.txt').read()
+  except OSError:
+    ts = load_times()
+    if not ts:
+        print_lcd('No WIFI, fix it')
+        wait(5)
+        machine.reset()
+    else:
+        ts = ts[-1]
+  return int(ts)
+
+def save_current_timestamp():
+   print('Saving current timestamp')
+   ts = get_timestamp()
+   with open('last_ts.txt', 'w') as f:
+      f.write(str())
+   
 
 def get_timestamp():
-    return ntp.getTimestamp() - (3600 * 6)
+    if not connected_wifi:
+       return get_stored_last_timestamp()
+    else:
+      return ntp.getTimestamp() - (3600 * 6)
 
 def get_human_date():
     n = get_timestamp()
@@ -309,8 +339,14 @@ def update_display():
 @timerSch.event('seconds')
 def tseconds():
   global current_uptime_secs
+  current_uptime_secs += 1
+  if current_uptime_secs % 600 == 0:
+     # Every 10 minute save current ts to allow run without NTP
+     save_current_timestamp()
+  if current_uptime_secs >= 3600:
+     print('Reset uptime after an hour')
+     current_uptime_secs = 0
   if power_save:
-    current_uptime_secs += 1
     if current_uptime_secs >= SLEEP_AFTER_SECS:
         print('Going to sleep')
         turn_off_display()
